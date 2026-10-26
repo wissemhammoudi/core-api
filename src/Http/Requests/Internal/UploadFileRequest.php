@@ -23,6 +23,23 @@ class UploadFileRequest extends FleetbaseRequest
      */
     public function rules()
     {
+        if ($this->input('type') === 'order_file') {
+            return [
+                'file' => ['required', 'file', 'max:10240', function ($attribute, $value, $fail) {
+                    if ($value instanceof \Illuminate\Http\UploadedFile && $value->isValid()) {
+                        \Fleetbase\Support\OrderDocumentPolicy::assertUpload($value);
+                    } else {
+                        $fail('Select a valid document upload.');
+                    }
+                }],
+                'subject_uuid' => 'prohibited',
+                'subject_id' => 'prohibited',
+                'subject_type' => 'prohibited',
+                'resize' => 'prohibited',
+                'resize_width' => 'prohibited',
+                'resize_height' => 'prohibited',
+            ];
+        }
         return [
             'file' => [
                 'required',

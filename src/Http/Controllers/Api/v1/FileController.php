@@ -28,7 +28,7 @@ class FileController extends Controller
         $disk        = $request->input('disk', config('filesystems.default'));
         $bucket      = $request->input('bucket', config('filesystems.disks.' . $disk . '.bucket', config('filesystems.disks.s3.bucket')));
         $type        = $request->input('type');
-        $size        = $request->input('file_size', $request->file->getSize());
+        $size        = $type === 'order_file' ? $request->file->getSize() : $request->input('file_size', $request->file->getSize());
         $path        = $request->input('path', 'uploads');
 
         // Generate a filename
@@ -60,6 +60,10 @@ class FileController extends Controller
         }
 
         // Set the subject ID specified
+        if ($type === 'order_file') {
+            $file->setMeta('order_document_upload', true);
+            $file->save();
+        }
         $file->setSubjectFromRequest($request);
 
         // Response the File resource
@@ -75,6 +79,7 @@ class FileController extends Controller
      */
     public function createFromBase64(UploadBase64FileRequest $request)
     {
+        abort_if($request->input('type') === 'order_file' || $request->input('file_type') === 'order_file', 422, 'Order documents require a multipart file upload.');
         $disk        = $request->input('disk', config('filesystems.default'));
         $bucket      = $request->input('bucket', config('filesystems.disks.' . $disk . '.bucket', config('filesystems.disks.s3.bucket')));
         $data        = $request->input('data');

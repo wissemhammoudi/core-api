@@ -104,7 +104,7 @@ class FileController extends FleetbaseController
             }
         } else {
             // Upload original file without resizing
-            $size = $request->input('file_size', $request->file->getSize());
+            $size = $type === 'order_file' ? $request->file->getSize() : $request->input('file_size', $request->file->getSize());
 
             try {
                 $storedPath = $request->file->storeAs($path, $fileName, ['disk' => $disk]);
@@ -147,6 +147,10 @@ class FileController extends FleetbaseController
         }
 
         // Set the subject if specified
+        if ($type === 'order_file') {
+            $file->setMeta('order_document_upload', true);
+            $file->save();
+        }
         $file->setSubjectFromRequest($request);
 
         // Done ✓
@@ -164,6 +168,7 @@ class FileController extends FleetbaseController
      */
     public function uploadBase64(UploadBase64FileRequest $request)
     {
+        abort_if($request->input('type') === 'order_file' || $request->input('file_type') === 'order_file', 422, 'Order documents require a multipart file upload.');
         $disk        = $request->input('disk', config('filesystems.default'));
         $bucket      = $request->input('bucket', config('filesystems.disks.' . $disk . '.bucket', config('filesystems.disks.s3.bucket')));
         $data        = $request->input('data');
