@@ -34,6 +34,11 @@ class ApiCredentialController extends FleetbaseController
     public $service = 'developers';
 
     /**
+     * The IAM schema resource this controller's permissions use.
+     */
+    public string $permissionResource = 'api-key';
+
+    /**
      * Create a new API credential record.
      *
      * Overrides the generic createRecord to ensure that when a test/sandbox key
@@ -191,11 +196,8 @@ class ApiCredentialController extends FleetbaseController
             return response()->error('API credential attempted to roll could not be found.');
         }
 
-        // create api credentials seed
-        $seed = array_map('intval', str_split(time() . $apiCredential->id));
-
-        // regenerate api key
-        $newCredentials = ApiCredential::generateKeys($seed, $apiCredential->test_mode);
+        // regenerate api key (random; see ApiCredential::generateKeys)
+        $newCredentials = ApiCredential::generateKeys(null, $apiCredential->test_mode);
 
         // store the previous key
         $previousApiKey = $apiCredential->key;

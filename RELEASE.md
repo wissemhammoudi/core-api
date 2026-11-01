@@ -1,38 +1,26 @@
-# v1.6.63 — Driver, customer and contact accounts stay out of the console
+# v1.6.68 — Resource transformers apply to every resource
 
-## Improvements
+## Added
 
-- Treat `driver`, `customer` and `contact` users as managed accounts: the FleetOps profile owns them, not IAM. `User` gains `MANAGED_TYPES`, `isManagedAccount()`, `isStaffAccount()`, `canAccessConsole()`, `canHoldConsoleSession()` and a `managed()` scope.
-- Promote instead of duplicating. When IAM creates or invites a team member whose email or phone belongs to a managed account in the organization, that account becomes a `user`. It gets the chosen role, permissions and policies and a join invite, and keeps its driver and customer profiles. The response carries `promoted_from`. Accepting any IAM invite also promotes a managed account and asks it to set a console password.
+- **Agnostic resource transformers.** Any extension can decorate the serialized output of any API resource without modifying the resource or its model. Register a transformer against an HTTP resource class, an Eloquent model class, an interface, or `'*'` (subclasses match), and `FleetbaseResource::resolve()` applies it to JSON responses, nested resources, collection items, webhook payloads and broadcast payloads. Transformers chain in ascending `priority` and can be scoped by `contexts` (`http`, `webhook`, `broadcast`) and `only` (`internal`, `public`). (#285)
+- `Fleetbase\Contracts\ResourceTransformer`, `Fleetbase\Contracts\PreparesResourceTransformation` (a once-per-collection `prepare()` hook for batch loading, so transformers never add N+1 queries), `Fleetbase\Support\ResourceTransformerContext`, and the `Fleetbase\Http\Transformers\Transformer` base class.
+- Closure transformers via `ResourceTransformerRegistry::register(fn (...) => ..., ['target' => ...])`.
+- `CoreServiceProvider::$transformers`, `registerTransformers()` and `registerTransformersFrom(__DIR__ . '/../Http/Transformers')` for declarative and directory-based registration from extensions, mirroring expansions.
 
-## Improvements for IAM
+## Changed
 
-- Let IAM admins ask a user to verify their email or phone. `POST users/{id}/send-verification` sends a one-click link by email or SMS; it lasts 48 hours. The public `auth/confirm-contact-verification` confirms it without signing in, and refuses the link if the address changed since. `users/verify/{id}` takes a `channel` (email by default, or phone). `UserFilter` adds `email_verified`, `phone_verified`, `country` and `timezone` for the new IAM columns.
+- `FleetbaseResourceCollection` resolves items (instead of calling `toArray()`), sharing one `prepare()` pass per collection. A hand-built collection with a manually set `preserveKeys` now filters item arrays with the item's flag.
+- `ResourceLifecycleEvent` payloads, chat participant broadcasts, `Utils::serializeJsonResource()` and the cached internal user payload serialize through `resolve()`, so transformers reach them and conditional `MissingValue`s are no longer emitted as `{}`.
+- `Find::httpResourceForModel()` caches internal and public resolutions separately, consulting the request only when a model has a dedicated `Internal` resource.
 
-## Fixes
+## Removed
 
-- Keep managed accounts out of the console:
-  - `auth/login` refuses drivers, contacts and customers. Customers keep the `customer_login_not_allowed` code; drivers and contacts get `console_access_not_allowed`.
-  - Session restore, bootstrap, 2FA verification, verify-email tokens and impersonation refuse drivers and contacts.
-  - Customers are still allowed on those endpoints because the customer portal runs inside the console and restores its session through them.
-- Free a deleted user's email and phone so a new account can use them. On soft delete they move to `meta.deleted_identity`; restoring the user puts them back only if no other account has taken them.
+- Legacy duck-typed transformers (`$target` property + static `output($model, $data)`), `ResourceTransformerRegistry::transform(Model, array)`, `resolveByTarget()`, `fixClassName()` and the static `$transformers` array. The `User` resource no longer calls the registry directly.
 
-## Security
+## Dependencies
 
-- Never grant the Administrator role by default. Before this fix:
-  - Creating or inviting a user without a role gave them the Administrator role, and so full organization access. Reported for IAM › Customers › Add customer with a blank Role.
-  - Accepting an invite with no role also granted it, and `joinOrganization` ignored the invite's role altogether.
+- `fleetbase/laravel-mysql-spatial` `^1.0.3`. The spatial `MysqlConnection` no longer connects to MySQL when the connection object is built, so resolving `DB::connection()` during boot (for example `artisan package:discover` during `composer install`) no longer requires a reachable database.
 
-  Now:
-  - A role is required when creating or inviting a user; without one the request returns 422.
-  - `Company::addUser`, `Company::assignUser` and `User::assignCompany` assign no role unless one is given.
-  - An invite without a role joins with no role.
-- Only admins or holders of the Administrator role may grant the Administrator role (403 otherwise), on create, invite and role update.
+## Upgrade Steps
 
-## Reliability
-
-- Cover the console guards for each account type, identity release and restore, and promotion through create, invite and invite acceptance.
-
-A database migration is not required. No configuration change is needed. The FleetOps side ships in fleetbase/fleetops#338.
-
-Changes: [#264](https://github.com/fleetbase/core-api/pull/264), [#266](https://github.com/fleetbase/core-api/pull/266), [#267](https://github.com/fleetbase/core-api/pull/267).
+- Extensions that registered a legacy transformer must implement `Fleetbase\Contracts\ResourceTransformer` (or extend `Fleetbase\Http\Transformers\Transformer`) and register it through `$transformers` or `registerTransformersFrom()`. See the README section "Resource transformers". The only known legacy consumer, aws-marketplace, is deprecated and is not updated.

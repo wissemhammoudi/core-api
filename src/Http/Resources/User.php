@@ -3,7 +3,6 @@
 namespace Fleetbase\Http\Resources;
 
 use Fleetbase\Support\Http;
-use Fleetbase\Support\ResourceTransformerRegistry;
 use Fleetbase\Support\Utils;
 
 class User extends FleetbaseResource
@@ -60,7 +59,12 @@ class User extends FleetbaseResource
             'created_at'                                                               => $this->created_at,
         ];
 
-        return ResourceTransformerRegistry::transform($this->resource, $data);
+        if (Http::isInternalRequest() && $request->user()?->isAdmin()) {
+            $data = array_merge($data, $this->resource->getAttribute('admin_authentication') ?? []);
+        }
+
+        // Registered resource transformers are applied by FleetbaseResource::resolve().
+        return $data;
     }
 
     /**
